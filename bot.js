@@ -78,7 +78,13 @@ bot.on("contact", async (msg) => {
       keyboard: [[{ text: "", request_contact: false }]],
       one_time_keyboard: false
     }
-  });//false so that request phn number gets hidden after saved
+  }); //false so that request phn number gets hidden after saved
+});
+
+//handle help for user
+bot.onText(/\/help/,(msg)=>{
+  const chatId=msg.chat.id
+  bot.sendMessage(chatId,"This bot can perform the following tasks: \n 1. Enter /start to start the bot. \n 2. Type any question to ask. \n 3. Send an image for analysis. \n 4. Before your questions, if you include /websearch you will get top 3 results from the web and their summary. ")
 });
 
 // Handle Gemini-powered chat
@@ -97,9 +103,11 @@ bot.on("message", async (msg) => {
     });
 
     const response = result.response.text();
-    
+    // save the response to MongoDB
     await new Chat({ chat_id: chatId, user_input: text, bot_response: response }).save();
+    // send response to user 
     bot.sendMessage(chatId, response);
+    
   } catch (error) {
     console.error("Error generating content:", error);
     bot.sendMessage(chatId, "Sorry, I couldn't process your request. Please try again later.");
@@ -129,7 +137,7 @@ bot.onText(/\/websearch (.+)/, async (msg, match) => {
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
 
-    // Store summary in MongoDB
+    // save the response to MongoDB
     await new Chat({ chat_id: chatId, user_input: query, bot_response: summary }).save();
 
     // Send message to user
@@ -156,11 +164,11 @@ bot.on("photo", async (msg) => {
       if (file.file_path.endsWith(".png")) mimeType = "image/png";
       else if (file.file_path.endsWith(".webp")) mimeType = "image/webp";
 
-      // Download the image as a buffer
+      // Download the image and convert to base64 format
       const response = await axios.get(fileUrl, { responseType: "arraybuffer" });
       const base64Image = Buffer.from(response.data).toString("base64");
 
-      // Initialize Gemini AI model for images
+      // Initialize Gemini AI model
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
       
       // Send the image for analysis
