@@ -12,7 +12,12 @@ const SEARCH_ENGINE_ID= process.env.SEARCH_ENGINE_ID;
 const GOOGLE_API_KEY=process.env.GOOGLE_API_KEY;
 
 // Initialize Telegram bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
+  webHook: true
+});//using webhook instead of polling
+
+bot.setWebHook(`https://ualbot.onrender.com/${TELEGRAM_BOT_TOKEN}`);
+
 
 // Initialize Google Gemini AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
