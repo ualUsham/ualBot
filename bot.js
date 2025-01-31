@@ -115,6 +115,7 @@ bot.on("message", async (msg) => {
 
   if (text && text.startsWith("/start")) return;
   if (text && text.startsWith("/websearch")) return;
+  if (text && text.startsWith("/help")) return;
   if (!text) return;
 
   try {
