@@ -3,6 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const express = require('express');
 
 // Load environment variables
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -14,10 +15,25 @@ const GOOGLE_API_KEY=process.env.GOOGLE_API_KEY;
 // Initialize Telegram bot
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
   webHook: true
-});//using webhook instead of polling
+});  //using webhook instead of polling
 
 bot.setWebHook(`https://ualbot.onrender.com/${TELEGRAM_BOT_TOKEN}`);
 
+//for webhook, we need a port to receive request from telegram
+const app=express();
+app.use(express.json());
+
+// Handle webhook updates
+app.post(`/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200); // Send OK response to Telegram
+});
+
+// Start server
+const PORT = process.env.PORT || 3000 || 8443;
+app.listen(PORT, () => {
+  console.log(`Bot is listening on port ${PORT}`);
+});
 
 // Initialize Google Gemini AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
