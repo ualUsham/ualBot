@@ -90,12 +90,12 @@ bot.on("message", async (msg) => {
     const text = msg.text;
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const result = await model.generateContent({
             contents: [{ role: "user", parts: [{ text: text }] }]
         });
 
-        const response = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand that.";
+        const response = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? "Sorry, I couldn't understand that.";
 
         await new Chat({ chat_id: chatId, user_input: text, bot_response: response }).save();
         bot.sendMessage(chatId, response);
