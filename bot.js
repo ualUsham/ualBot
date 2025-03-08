@@ -113,28 +113,27 @@ bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (text && text.startsWith("/start")) return;
-  if (text && text.startsWith("/websearch")) return;
-  if (text && text.startsWith("/help")) return;
-  if (!text) return;
-
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: text }] }]
     });
 
-    const response = result.response.text();
-    // save the response to MongoDB
+    // Extract the response safely
+    const response = result.response?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand that.";
+
+    // Save response to MongoDB
     await new Chat({ chat_id: chatId, user_input: text, bot_response: response }).save();
-    // send response to user 
+
+    // Send response to user
     bot.sendMessage(chatId, response);
     
   } catch (error) {
-    console.error("Error generating content:", error);
+    console.error("Error generating content:", error.message, error.stack);
     bot.sendMessage(chatId, "Sorry, I couldn't process your request. Please try again later.");
   }
 });
+
   
 
 // Handle web search
