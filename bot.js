@@ -2,7 +2,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
 const axios = require('axios');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const express = require('express');
 
 // Load environment variables
@@ -119,7 +119,7 @@ bot.on("message", async (msg) => {
   if (!text) return;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: text }] }]
     });
@@ -154,7 +154,7 @@ bot.onText(/\/websearch (.+)/, async (msg, match) => {
     const searchResults = response.data.items.slice(0, 3).map(item => `${item.title}\n${item.link}`).join('\n\n');
 
     // Generate summary using Gemini API
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `Summarize the following search results:\n\n${searchResults}`;
     const result = await model.generateContent(prompt);
     const summary = result.response.text();
@@ -191,7 +191,7 @@ bot.on("photo", async (msg) => {
       const base64Image = Buffer.from(response.data).toString("base64");
 
       // Initialize Gemini AI model
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
       // Send the image for analysis
       const result = await model.generateContent([
