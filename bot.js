@@ -9,210 +9,161 @@ const express = require('express');
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MONGODB_URI = process.env.MONGODB_URI;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const SEARCH_ENGINE_ID= process.env.SEARCH_ENGINE_ID;
-const GOOGLE_API_KEY=process.env.GOOGLE_API_KEY;
+const SEARCH_ENGINE_ID = process.env.SEARCH_ENGINE_ID;
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 
 // Initialize Telegram bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
-  webHook: true
-});  //using webhook instead of polling
-
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { webHook: true });
 bot.setWebHook(`https://ualbot.onrender.com/${TELEGRAM_BOT_TOKEN}`);
 
-//for webhook, we need a port to receive request from telegram
-const app=express();
+// Webhook setup
+const app = express();
 app.use(express.json());
 
-// Handle webhook updates
 app.post(`/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200); // Send OK response to Telegram
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
 
-// Start server
-const PORT = process.env.PORT || 3000 || 8443;
-app.listen(PORT, () => {
-  console.log(`Bot is listening on port ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Bot is listening on port ${PORT}`));
 
-// Initialize Google Gemini AI
+// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// MongoDB Local Connection Setup
-mongoose.connect(MONGODB_URI, {
-  serverSelectionTimeoutMS: 10000, 
-}).then(() => {
-  console.log("Connected to MongoDB!");
-}).catch(err => {
-  console.error("MongoDB connection error:", err);
-});
+// MongoDB Connection
+mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 10000 })
+    .then(() => console.log("Connected to MongoDB!"))
+    .catch(err => console.error("MongoDB connection error:", err));
 
-// Define MongoDB Schemas i.e structure of documents
 const userSchema = new mongoose.Schema({
-  chat_id: Number,
-  first_name: String,
-  username: String,
-  phone_number: String,
+    chat_id: Number,
+    first_name: String,
+    username: String,
+    phone_number: String,
 });
 
 const chatSchema = new mongoose.Schema({
-  chat_id: Number,
-  user_input: String,
-  bot_response: String,
-  timestamp: { type: Date, default: Date.now },
+    chat_id: Number,
+    user_input: String,
+    bot_response: String,
+    timestamp: { type: Date, default: Date.now },
 });
 
-//creating mongodb collection
 const User = mongoose.model("User", userSchema);
 const Chat = mongoose.model("Chat", chatSchema);
 
-// Handle Start & Registration
+// Handle /start command
 bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const firstName = msg.chat.first_name;
-  const username = msg.chat.username;
+    const chatId = msg.chat.id;
+    const firstName = msg.chat.first_name;
+    const username = msg.chat.username;
 
-  let user = await User.findOne({ chat_id: chatId });
-  if (!user) {
-    user = new User({ chat_id: chatId, first_name: firstName, username: username });
-    await user.save();
-    bot.sendMessage(chatId, `Welcome, ${firstName}! You can ask questions to this bot. Feel free to drop any questions here`)
-    bot.sendMessage(chatId, `To continue chatting, please share your Phone Number by clicking the button next to the typing area.`, {
-      reply_markup: {
-        keyboard: [[{ text: "Share Phone Number", request_contact: true }]],
-        one_time_keyboard: true
-      }
-    });
-  } else {
-    bot.sendMessage(chatId, `Welcome back ${firstName}! Please ask a question. I will be happy to assist you!!`);
-  }
+    let user = await User.findOne({ chat_id: chatId });
+    if (!user) {
+        user = new User({ chat_id: chatId, first_name: firstName, username: username });
+        await user.save();
+        bot.sendMessage(chatId, `Welcome, ${firstName}! You can ask me anything.`);
+        bot.sendMessage(chatId, `Please share your phone number by clicking the button below.`, {
+            reply_markup: {
+                keyboard: [[{ text: "Share Phone Number", request_contact: true }]],
+                one_time_keyboard: true
+            }
+        });
+    } else {
+        bot.sendMessage(chatId, `Welcome back, ${firstName}! Ask me anything.`);
+    }
 });
 
 // Handle phone number submission
 bot.on("contact", async (msg) => {
-  const chatId = msg.chat.id;
-  const phoneNumber = msg.contact.phone_number;
+    const chatId = msg.chat.id;
+    const phoneNumber = msg.contact.phone_number;
 
-  await User.updateOne({ chat_id: chatId }, { phone_number: phoneNumber });
-  bot.sendMessage(chatId, "Phone number saved successfully! Now you can start asking questions.", {
-    reply_markup: {
-      keyboard: [[{ text: "", request_contact: false }]],
-      one_time_keyboard: false
-    }
-  }); //false so that request phn number gets hidden after saved
+    await User.updateOne({ chat_id: chatId }, { phone_number: phoneNumber });
+    bot.sendMessage(chatId, "Phone number saved! You can now start chatting.");
 });
 
-//handle help for user
-bot.onText(/\/help/,(msg)=>{
-  const chatId=msg.chat.id
-  bot.sendMessage(chatId,"This bot can perform the following tasks: \n 1. Enter /start to start the bot. \n 2. Type any question to ask. \n 3. Send an image for analysis. \n 4. Before your questions, if you include /websearch you will get top 3 results from the web and their summary. ")
-});
-
-// Handle Gemini-powered chat
+// Handle user queries using Gemini AI
 bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
+    const chatId = msg.chat.id;
+    const text = msg.text;
 
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: text }] }]
-    });
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: text }] }]
+        });
 
-    // Extract the response safely
-    const response = result.response?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand that.";
+        const response = result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't understand that.";
 
-    // Save response to MongoDB
-    await new Chat({ chat_id: chatId, user_input: text, bot_response: response }).save();
-
-    // Send response to user
-    bot.sendMessage(chatId, response);
-    
-  } catch (error) {
-    console.error("Error generating content:", error.message, error.stack);
-    bot.sendMessage(chatId, "Sorry, I couldn't process your request. Please try again later.");
-  }
+        await new Chat({ chat_id: chatId, user_input: text, bot_response: response }).save();
+        bot.sendMessage(chatId, response);
+    } catch (error) {
+        console.error("Error generating content:", error.message, error.stack);
+        bot.sendMessage(chatId, "Sorry, I couldn't process your request.");
+    }
 });
-
-  
 
 // Handle web search
 bot.onText(/\/websearch (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const query = match[1];
+    const chatId = msg.chat.id;
+    const query = match[1];
 
-  try {
-    // Fetch search results
-    const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-      params: {
-        q: query,
-        key: GOOGLE_API_KEY,
-        cx: SEARCH_ENGINE_ID,
-      },
-    });
-    const searchResults = response.data.items.slice(0, 3).map(item => `${item.title}\n${item.link}`).join('\n\n');
+    try {
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: { q: query, key: GOOGLE_API_KEY, cx: SEARCH_ENGINE_ID }
+        });
 
-    // Generate summary using Gemini API
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const prompt = `Summarize the following search results:\n\n${searchResults}`;
-    const result = await model.generateContent(prompt);
-    const summary = result.response.text();
+        const searchResults = response.data.items.slice(0, 3)
+            .map(item => `${item.title}\n${item.link}`)
+            .join('\n\n');
 
-    // save the response to MongoDB
-    await new Chat({ chat_id: chatId, user_input: query, bot_response: summary }).save();
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: `Summarize this: ${searchResults}` }] }]
+        });
 
-    // Send message to user
-    bot.sendMessage(chatId, `🔍 Top search results:\n\n${searchResults}\n\n📝 Summary:\n\n${summary}`);
-  } catch (error) {
-    console.error('Error fetching search results:', error.response ? error.response.data : error.message);
-    bot.sendMessage(chatId, 'Error fetching search results.');
-  }
+        const summary = result.candidates?.[0]?.content?.parts?.[0]?.text || "No summary available.";
+
+        await new Chat({ chat_id: chatId, user_input: query, bot_response: summary }).save();
+        bot.sendMessage(chatId, `🔍 Search Results:\n\n${searchResults}\n\n📝 Summary:\n${summary}`);
+    } catch (error) {
+        console.error('Error fetching search results:', error.message);
+        bot.sendMessage(chatId, 'Error fetching search results.');
+    }
 });
 
-
-// Handle image/file analysis
+// Handle image analysis
 bot.on("photo", async (msg) => {
-  const chatId = msg.chat.id;
-  const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const chatId = msg.chat.id;
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
 
-  try {
-      // Get the file URL from Telegram
-      const file = await bot.getFile(fileId);
-      const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${file.file_path}`;
-      
-      //for different image formats
-      let mimeType = "image/jpeg"; 
-      if (file.file_path.endsWith(".png")) mimeType = "image/png";
-      else if (file.file_path.endsWith(".webp")) mimeType = "image/webp";
+    try {
+        const file = await bot.getFile(fileId);
+        const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${file.file_path}`;
 
-      // Download the image and convert to base64 format
-      const response = await axios.get(fileUrl, { responseType: "arraybuffer" });
-      const base64Image = Buffer.from(response.data).toString("base64");
+        const mimeType = file.file_path.endsWith(".png") ? "image/png" : "image/jpeg";
 
-      // Initialize Gemini AI model
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-      
-      // Send the image for analysis
-      const result = await model.generateContent([
-          {
-              inlineData: {
-                  data: base64Image,
-                  mimeType: mimeType, 
-              },
-          },
-          "Describe this image in brief.",
-      ]);
+        const response = await axios.get(fileUrl, { responseType: "arraybuffer" });
+        const base64Image = Buffer.from(response.data).toString("base64");
 
-      const description = result.response.text();
-      //save the response to mongodb
-      await new Chat({ chat_id: chatId, user_input:"image", bot_response: description }).save();
-      // Send the response back to Telegram
-      bot.sendMessage(chatId, `🖼 Image Analysis: ${description}`);
-  } catch (error) {
-      console.error("Error analyzing image:", error);
-      bot.sendMessage(chatId, "Error analyzing the image.");
-  }
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+        const result = await model.generateContent({
+            contents: [
+                { role: "user", parts: [{ inlineData: { data: base64Image, mimeType: mimeType } }, { text: "Describe this image briefly." }] }
+            ]
+        });
+
+        const description = result.candidates?.[0]?.content?.parts?.[0]?.text || "No description available.";
+
+        await new Chat({ chat_id: chatId, user_input: "image", bot_response: description }).save();
+        bot.sendMessage(chatId, `🖼 Image Analysis: ${description}`);
+    } catch (error) {
+        console.error("Error analyzing image:", error);
+        bot.sendMessage(chatId, "Error analyzing the image.");
+    }
 });
 
 console.log("Bot is running...");
-
