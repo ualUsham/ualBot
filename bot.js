@@ -26,7 +26,7 @@ app.use(express.json());
 // Handle webhook updates
 app.post(`/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
   bot.processUpdate(req.body);
-  res.sendStatus(200); // Send OK response to Telegram
+  res.sendStatus(200); 
 });
 
 // Start server
